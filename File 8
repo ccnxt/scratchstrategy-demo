@@ -1,0 +1,674 @@
+import React, { useState, useEffect } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+
+const ProfessionalScratchDemo = () => {
+  const [currentView, setCurrentView] = useState('landing'); // landing, game, analytics, about
+  const [gameState, setGameState] = useState('setup');
+  const [cardType, setCardType] = useState('symbol');
+  const [buyIn, setBuyIn] = useState(1);
+  const [gridSize, setGridSize] = useState(9);
+  const [theme, setTheme] = useState('vegas');
+  const [scratchedSquares, setScratchedSquares] = useState([]);
+  const [cardData, setCardData] = useState([]);
+  const [winningCombination, setWinningCombination] = useState([]);
+  const [gameResult, setGameResult] = useState(null);
+  const [balance, setBalance] = useState(100);
+  const [gameHistory, setGameHistory] = useState([]);
+  const [totalGames, setTotalGames] = useState(0);
+
+  // Themes with different symbols and styles
+  const themes = {
+    vegas: {
+      name: 'Vegas Classic',
+      symbols: ['🎰', '💎', '🍒', '⭐', '🔔', '💰'],
+      colors: 'from-red-600 to-yellow-600',
+      cardColor: 'from-yellow-400 to-red-500'
+    },
+    ocean: {
+      name: 'Ocean Treasure',
+      symbols: ['🐚', '🐠', '⚓', '🏝️', '🦑', '💙'],
+      colors: 'from-blue-600 to-cyan-600',
+      cardColor: 'from-cyan-400 to-blue-500'
+    },
+    space: {
+      name: 'Cosmic Adventure',
+      symbols: ['🚀', '🌟', '🛸', '🌙', '⭐', '🪐'],
+      colors: 'from-purple-600 to-indigo-600',
+      cardColor: 'from-indigo-400 to-purple-500'
+    },
+    jungle: {
+      name: 'Jungle Quest',
+      symbols: ['🦁', '🐅', '🦒', '🌿', '💚', '🗿'],
+      colors: 'from-green-600 to-emerald-600',
+      cardColor: 'from-emerald-400 to-green-500'
+    }
+  };
+
+  const currentTheme = themes[theme];
+  const multipliers = ['2x', '3x', '5x', '10x', '15x', '20x'];
+
+  const symbolValues = {
+    [currentTheme.symbols[0]]: 50,
+    [currentTheme.symbols[1]]: 25,
+    [currentTheme.symbols[2]]: 15,
+    [currentTheme.symbols[3]]: 10,
+    [currentTheme.symbols[4]]: 8,
+    [currentTheme.symbols[5]]: 5
+  };
+
+  // Analytics calculations
+  const winRate = totalGames > 0 ? (gameHistory.filter(g => g.win).length / totalGames * 100).toFixed(1) : 0;
+  const totalWinnings = gameHistory.reduce((sum, game) => sum + (game.win ? game.payout : 0), 0);
+  const totalSpent = gameHistory.reduce((sum, game) => sum + game.buyIn, 0);
+  const netProfit = totalWinnings - totalSpent;
+
+  const generateCard = () => {
+    const squares = [];
+    let winningSymbol;
+    const symbolSet = cardType === 'symbol' ? currentTheme.symbols : multipliers;
+    
+    // Pick a random winning symbol
+    winningSymbol = symbolSet[Math.floor(Math.random() * symbolSet.length)];
+    
+    // Place 3 winning symbols randomly
+    const winningPositions = [];
+    while (winningPositions.length < 3) {
+      const pos = Math.floor(Math.random() * gridSize);
+      if (!winningPositions.includes(pos)) {
+        winningPositions.push(pos);
+      }
+    }
+    
+    setWinningCombination(winningPositions);
+    
+    // Fill the grid
+    for (let i = 0; i < gridSize; i++) {
+      if (winningPositions.includes(i)) {
+        squares.push(winningSymbol);
+      } else {
+        const otherSymbols = symbolSet.filter(s => s !== winningSymbol);
+        squares.push(otherSymbols[Math.floor(Math.random() * otherSymbols.length)]);
+      }
+    }
+    
+    setCardData(squares);
+  };
+
+  const startGame = () => {
+    if (balance < buyIn) {
+      alert('Insufficient balance!');
+      return;
+    }
+    
+    setBalance(balance - buyIn);
+    setScratchedSquares([]);
+    setGameResult(null);
+    generateCard();
+    setGameState('playing');
+  };
+
+  const scratchSquare = (index) => {
+    if (scratchedSquares.includes(index) || gameState !== 'playing') return;
+    
+    const newScratched = [...scratchedSquares, index];
+    setScratchedSquares(newScratched);
+    
+    if (newScratched.length >= 4) {
+      const gameData = { win: false, buyIn, reason: 'Too many squares', theme, gridSize };
+      setGameHistory(prev => [...prev, gameData]);
+      setTotalGames(prev => prev + 1);
+      setGameResult({ win: false, reason: 'Too many squares scratched!' });
+      setGameState('gameOver');
+      return;
+    }
+    
+    if (newScratched.length === 3) {
+      const isWinningCombo = newScratched.every(pos => winningCombination.includes(pos));
+      
+      if (isWinningCombo) {
+        let payout;
+        if (cardType === 'symbol') {
+          payout = symbolValues[cardData[index]];
+        } else {
+          const multiplierValue = parseInt(cardData[index].replace('x', ''));
+          payout = buyIn * multiplierValue;
+        }
+        
+        setBalance(prev => prev + payout);
+        const gameData = { win: true, buyIn, payout, symbol: cardData[index], theme, gridSize };
+        setGameHistory(prev => [...prev, gameData]);
+        setGameResult({ win: true, payout, symbol: cardData[index] });
+      } else {
+        const gameData = { win: false, buyIn, reason: 'Wrong combination', theme, gridSize };
+        setGameHistory(prev => [...prev, gameData]);
+        setGameResult({ win: false, reason: 'Wrong combination!' });
+      }
+      setTotalGames(prev => prev + 1);
+      setGameState('gameOver');
+    }
+  };
+
+  const resetGame = () => {
+    setGameState('setup');
+    setScratchedSquares([]);
+    setCardData([]);
+    setGameResult(null);
+  };
+
+  const getGridCols = () => {
+    if (gridSize === 6) return 'grid-cols-3';
+    if (gridSize === 9) return 'grid-cols-3';
+    if (gridSize === 15) return 'grid-cols-5';
+    if (gridSize === 20) return 'grid-cols-5';
+    return 'grid-cols-3';
+  };
+
+  // Landing Page Component
+  const LandingPage = () => (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
+      {/* Navigation */}
+      <nav className="p-6">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-white">ScratchStrategy™</h1>
+          <div className="space-x-4">
+            <button 
+              onClick={() => setCurrentView('game')} 
+              className="text-white hover:text-blue-300 transition-colors"
+            >
+              Demo
+            </button>
+            <button 
+              onClick={() => setCurrentView('analytics')} 
+              className="text-white hover:text-blue-300 transition-colors"
+            >
+              Analytics
+            </button>
+            <button 
+              onClick={() => setCurrentView('about')} 
+              className="text-white hover:text-blue-300 transition-colors"
+            >
+              About
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <div className="max-w-6xl mx-auto px-6 py-20 text-center text-white">
+        <h2 className="text-5xl font-bold mb-6">
+          Revolutionary Scratch Card Gaming
+        </h2>
+        <p className="text-xl mb-8 text-gray-300 max-w-3xl mx-auto">
+          Every card has winning potential. Strategic gameplay meets guaranteed opportunity. 
+          The first scratch card game where skill and luck combine in perfect harmony.
+        </p>
+        
+        {/* Key Features */}
+        <div className="grid md:grid-cols-3 gap-8 my-16">
+          <div className="bg-white/10 p-6 rounded-xl backdrop-blur">
+            <div className="text-4xl mb-4">🎯</div>
+            <h3 className="text-xl font-bold mb-2">Strategic Choice</h3>
+            <p className="text-gray-300">Choose exactly 3 squares. Every decision matters.</p>
+          </div>
+          <div className="bg-white/10 p-6 rounded-xl backdrop-blur">
+            <div className="text-4xl mb-4">🏆</div>
+            <h3 className="text-xl font-bold mb-2">Always Winnable</h3>
+            <p className="text-gray-300">Every card contains a winning combination.</p>
+          </div>
+          <div className="bg-white/10 p-6 rounded-xl backdrop-blur">
+            <div className="text-4xl mb-4">⚡</div>
+            <h3 className="text-xl font-bold mb-2">Instant Results</h3>
+            <p className="text-gray-300">Quick gameplay with immediate feedback.</p>
+          </div>
+        </div>
+
+        <button 
+          onClick={() => setCurrentView('game')}
+          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-full text-lg transition-all transform hover:scale-105"
+        >
+          Try the Demo
+        </button>
+      </div>
+
+      {/* Stats Preview */}
+      <div className="max-w-6xl mx-auto px-6 py-16">
+        <div className="grid md:grid-cols-4 gap-6 text-center text-white">
+          <div className="bg-white/5 p-6 rounded-xl">
+            <div className="text-3xl font-bold text-blue-400">{totalGames}</div>
+            <div className="text-gray-300">Games Played</div>
+          </div>
+          <div className="bg-white/5 p-6 rounded-xl">
+            <div className="text-3xl font-bold text-green-400">{winRate}%</div>
+            <div className="text-gray-300">Win Rate</div>
+          </div>
+          <div className="bg-white/5 p-6 rounded-xl">
+            <div className="text-3xl font-bold text-yellow-400">${totalWinnings}</div>
+            <div className="text-gray-300">Total Winnings</div>
+          </div>
+          <div className="bg-white/5 p-6 rounded-xl">
+            <div className={`text-3xl font-bold ${netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              ${netProfit}
+            </div>
+            <div className="text-gray-300">Net Profit</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Analytics Dashboard Component
+  const AnalyticsDashboard = () => {
+    const gridSizeData = [
+      { size: '6', games: gameHistory.filter(g => g.gridSize === 6).length, wins: gameHistory.filter(g => g.gridSize === 6 && g.win).length },
+      { size: '9', games: gameHistory.filter(g => g.gridSize === 9).length, wins: gameHistory.filter(g => g.gridSize === 9 && g.win).length },
+      { size: '15', games: gameHistory.filter(g => g.gridSize === 15).length, wins: gameHistory.filter(g => g.gridSize === 15 && g.win).length },
+      { size: '20', games: gameHistory.filter(g => g.gridSize === 20).length, wins: gameHistory.filter(g => g.gridSize === 20 && g.win).length }
+    ];
+
+    const themeData = Object.keys(themes).map(themeKey => ({
+      theme: themes[themeKey].name,
+      games: gameHistory.filter(g => g.theme === themeKey).length,
+      revenue: gameHistory.filter(g => g.theme === themeKey).reduce((sum, g) => sum + g.buyIn, 0)
+    }));
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-3xl font-bold text-white">Analytics Dashboard</h1>
+            <button 
+              onClick={() => setCurrentView('landing')}
+              className="text-white hover:text-blue-300"
+            >
+              ← Back to Home
+            </button>
+          </div>
+
+          {/* Key Metrics */}
+          <div className="grid md:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white/10 p-6 rounded-xl text-white">
+              <h3 className="text-lg font-semibold mb-2">Total Games</h3>
+              <p className="text-3xl font-bold">{totalGames}</p>
+            </div>
+            <div className="bg-white/10 p-6 rounded-xl text-white">
+              <h3 className="text-lg font-semibold mb-2">Win Rate</h3>
+              <p className="text-3xl font-bold text-green-400">{winRate}%</p>
+            </div>
+            <div className="bg-white/10 p-6 rounded-xl text-white">
+              <h3 className="text-lg font-semibold mb-2">Revenue</h3>
+              <p className="text-3xl font-bold text-yellow-400">${totalSpent}</p>
+            </div>
+            <div className="bg-white/10 p-6 rounded-xl text-white">
+              <h3 className="text-lg font-semibold mb-2">House Edge</h3>
+              <p className="text-3xl font-bold text-blue-400">{totalSpent > 0 ? ((totalSpent - totalWinnings) / totalSpent * 100).toFixed(1) : 0}%</p>
+            </div>
+          </div>
+
+          {/* Charts */}
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="bg-white/10 p-6 rounded-xl">
+              <h3 className="text-xl font-bold text-white mb-4">Performance by Grid Size</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={gridSizeData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="size" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="games" fill="#8884d8" name="Games Played" />
+                  <Bar dataKey="wins" fill="#82ca9d" name="Wins" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="bg-white/10 p-6 rounded-xl">
+              <h3 className="text-xl font-bold text-white mb-4">Revenue by Theme</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={themeData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="theme" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="revenue" fill="#ffc658" name="Revenue ($)" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Game Component (Enhanced)
+  const GameDemo = () => {
+    if (gameState === 'setup') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-2xl font-bold text-white">Game Demo</h1>
+              <button 
+                onClick={() => setCurrentView('landing')}
+                className="text-white hover:text-blue-300"
+              >
+                ← Back to Home
+              </button>
+            </div>
+
+            <div className={`bg-gradient-to-br ${currentTheme.colors} p-6 rounded-xl text-white`}>
+              <h2 className="text-xl font-bold text-center mb-6">🎰 {currentTheme.name}</h2>
+              
+              <div className="bg-white/10 p-4 rounded-lg mb-4">
+                <div className="flex justify-between items-center">
+                  <p className="text-lg font-semibold">Balance: ${balance}</p>
+                  <button 
+                    onClick={() => setBalance(100)}
+                    className="bg-red-500/30 hover:bg-red-500/50 text-white text-xs font-semibold py-1 px-3 rounded transition-all"
+                  >
+                    Reset ($100)
+                  </button>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Theme:</label>
+                  <select 
+                    value={theme} 
+                    onChange={(e) => setTheme(e.target.value)}
+                    className="w-full p-2 rounded bg-white/20 text-white"
+                  >
+                    {Object.entries(themes).map(([key, t]) => (
+                      <option key={key} value={key} className="text-black">{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Card Type:</label>
+                  <select 
+                    value={cardType} 
+                    onChange={(e) => setCardType(e.target.value)}
+                    className="w-full p-2 rounded bg-white/20 text-white"
+                  >
+                    <option value="symbol" className="text-black">Symbol Match</option>
+                    <option value="multiplier" className="text-black">Multiplier</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Buy-in Amount:</label>
+                  <select 
+                    value={buyIn} 
+                    onChange={(e) => setBuyIn(Number(e.target.value))}
+                    className="w-full p-2 rounded bg-white/20 text-white"
+                  >
+                    <option value={1} className="text-black">$1</option>
+                    <option value={5} className="text-black">$5</option>
+                    <option value={10} className="text-black">$10</option>
+                    <option value={20} className="text-black">$20</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Difficulty:</label>
+                  <select 
+                    value={gridSize} 
+                    onChange={(e) => setGridSize(Number(e.target.value))}
+                    className="w-full p-2 rounded bg-white/20 text-white"
+                  >
+                    <option value={6} className="text-black">6 squares (Easy - 1:20 odds)</option>
+                    <option value={9} className="text-black">9 squares (Medium - 1:84 odds)</option>
+                    <option value={15} className="text-black">15 squares (Hard - 1:455 odds)</option>
+                    <option value={20} className="text-black">20 squares (Expert - 1:1140 odds)</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="mt-6 p-3 bg-white/20 rounded text-sm">
+                <p><strong>Rules:</strong></p>
+                <p>• Find exactly 3 matching {cardType === 'symbol' ? 'symbols' : 'multipliers'}</p>
+                <p>• Scratch only 3 squares - no more!</p>
+                <p>• Every card has a winning combination</p>
+                <p>• Wrong match or 4+ squares = you lose</p>
+              </div>
+              
+              <button 
+                onClick={startGame}
+                className="w-full mt-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-3 px-6 rounded-lg transition-all"
+              >
+                Start Game (${buyIn})
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (gameState === 'playing') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-6">
+          <div className="max-w-2xl mx-auto">
+            <div className={`bg-gradient-to-br ${currentTheme.colors} p-6 rounded-xl text-white`}>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">🎯 {cardType === 'symbol' ? 'Symbol Hunt' : 'Multiplier Hunt'}</h2>
+                <div className="text-right">
+                  <p className="text-sm">Balance: ${balance + buyIn}</p>
+                  <p className="text-sm">Scratched: {scratchedSquares.length}/3</p>
+                </div>
+              </div>
+              
+              <div className={`grid ${getGridCols()} gap-3 mb-4`}>
+                {cardData.map((item, index) => (
+                  <button
+                    key={index}
+                    onClick={() => scratchSquare(index)}
+                    className={`
+                      aspect-square rounded-lg text-2xl font-bold transition-all transform hover:scale-105
+                      ${scratchedSquares.includes(index) 
+                        ? 'bg-white text-gray-800 shadow-lg' 
+                        : `bg-gradient-to-br ${currentTheme.cardColor} hover:brightness-110 text-white shadow-md`
+                      }
+                    `}
+                  >
+                    {scratchedSquares.includes(index) ? item : '?'}
+                  </button>
+                ))}
+              </div>
+              
+              <div className="bg-white/20 p-3 rounded text-center">
+                <p className="text-sm">Click squares to scratch them off</p>
+                <p className="text-xs text-gray-200">Find 3 matching {cardType === 'symbol' ? 'symbols' : 'multipliers'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (gameState === 'gameOver') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-6">
+          <div className="max-w-2xl mx-auto">
+            <div className={`bg-gradient-to-br ${currentTheme.colors} p-6 rounded-xl text-white text-center`}>
+              <h2 className="text-2xl font-bold mb-4">
+                {gameResult.win ? '🎉 You Won!' : '💔 Game Over'}
+              </h2>
+              
+              {gameResult.win ? (
+                <div className="bg-green-500/30 p-4 rounded-lg mb-4">
+                  <p className="text-4xl mb-2">{gameResult.symbol}</p>
+                  <p className="text-2xl font-bold">Won: ${gameResult.payout}</p>
+                  <p className="text-sm">New Balance: ${balance}</p>
+                </div>
+              ) : (
+                <div className="bg-red-500/30 p-4 rounded-lg mb-4">
+                  <p className="text-lg">{gameResult.reason}</p>
+                  <p className="text-sm">Balance: ${balance}</p>
+                </div>
+              )}
+              
+              <div className="bg-white/10 p-3 rounded-lg mb-4">
+                <p className="text-sm font-semibold mb-2">Winning combination was:</p>
+                <div className={`grid ${getGridCols()} gap-1 max-w-xs mx-auto`}>
+                  {cardData.map((item, index) => (
+                    <div
+                      key={index}
+                      className={`
+                        aspect-square rounded text-sm flex items-center justify-center
+                        ${winningCombination.includes(index) 
+                          ? 'bg-green-500 text-white' 
+                          : 'bg-gray-600 text-gray-300'
+                        }
+                      `}
+                    >
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={resetGame}
+                  className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all"
+                >
+                  Play Again
+                </button>
+                <button 
+                  onClick={() => setCurrentView('analytics')}
+                  className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all"
+                >
+                  View Stats
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  };
+
+  // About/Business Case Component
+  const AboutPage = () => (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-6">
+      <div className="max-w-4xl mx-auto text-white">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">Business Overview</h1>
+          <button 
+            onClick={() => setCurrentView('landing')}
+            className="text-white hover:text-blue-300"
+          >
+            ← Back to Home
+          </button>
+        </div>
+
+        <div className="space-y-8">
+          <div className="bg-white/10 p-6 rounded-xl">
+            <h2 className="text-2xl font-bold mb-4">🎯 The Innovation</h2>
+            <p className="text-gray-300 leading-relaxed">
+              ScratchStrategy™ revolutionizes traditional scratch card gaming by introducing strategic decision-making 
+              while maintaining the instant gratification players love. Unlike traditional scratch cards where outcomes 
+              are predetermined, our system guarantees every card contains a winning combination - the challenge is 
+              finding it with limited attempts.
+            </p>
+          </div>
+
+          <div className="bg-white/10 p-6 rounded-xl">
+            <h2 className="text-2xl font-bold mb-4">💰 Market Opportunity</h2>
+            <ul className="space-y-2 text-gray-300">
+              <li>• Global online gambling market: $66+ billion annually</li>
+              <li>• Scratch card segment growing 8%+ yearly</li>
+              <li>• Mobile gaming driving new player acquisition</li>
+              <li>• Skill-based gambling gaining regulatory approval</li>
+            </ul>
+          </div>
+
+          <div className="bg-white/10 p-6 rounded-xl">
+            <h2 className="text-2xl font-bold mb-4">🏆 Competitive Advantages</h2>
+            <div className="grid md:grid-cols-2 gap-4 text-gray-300">
+              <div>
+                <h3 className="font-bold text-white mb-2">Player Benefits:</h3>
+                <ul className="space-y-1 text-sm">
+                  <li>• Every card is theoretically winnable</li>
+                  <li>• Strategic gameplay reduces frustration</li>
+                  <li>• Multiple difficulty levels</li>
+                  <li>• Transparent odds and mechanics</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-bold text-white mb-2">Operator Benefits:</h3>
+                <ul className="space-y-1 text-sm">
+                  <li>• Maintained house edge through skill barrier</li>
+                  <li>• Higher player engagement and retention</li>
+                  <li>• Scalable across multiple themes</li>
+                  <li>• Appeals to skill-gaming trend</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/10 p-6 rounded-xl">
+            <h2 className="text-2xl font-bold mb-4">📊 Business Model</h2>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="text-center">
+                <h3 className="font-bold text-white mb-2">Licensing</h3>
+                <p className="text-gray-300 text-sm">License technology to existing gambling operators</p>
+              </div>
+              <div className="text-center">
+                <h3 className="font-bold text-white mb-2">Revenue Share</h3>
+                <p className="text-gray-300 text-sm">Percentage of net gaming revenue from operators</p>
+              </div>
+              <div className="text-center">
+                <h3 className="font-bold text-white mb-2">White Label</h3>
+                <p className="text-gray-300 text-sm">Complete platform solution for new entrants</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-r from-green-500 to-blue-500 p-6 rounded-xl text-center">
+            <h2 className="text-2xl font-bold mb-4">Ready to Partner?</h2>
+            <p className="mb-4">Join the revolution in strategic scratch card gaming.</p>
+            <div className="space-x-4">
+              <button 
+                onClick={() => setCurrentView('game')}
+                className="bg-white text-blue-600 font-bold py-2 px-6 rounded-lg hover:bg-gray-100 transition-all"
+              >
+                Try Demo
+              </button>
+              <button 
+                onClick={() => setCurrentView('analytics')}
+                className="bg-white/20 text-white font-bold py-2 px-6 rounded-lg hover:bg-white/30 transition-all"
+              >
+                View Analytics
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Main App Router
+  const renderCurrentView = () => {
+    switch (currentView) {
+      case 'landing':
+        return <LandingPage />;
+      case 'game':
+        return <GameDemo />;
+      case 'analytics':
+        return <AnalyticsDashboard />;
+      case 'about':
+        return <AboutPage />;
+      default:
+        return <LandingPage />;
+    }
+  };
+
+  return (
+    <div className="font-sans">
+      {renderCurrentView()}
+    </div>
+  );
+};
+
+export default ProfessionalScratchDemo;
